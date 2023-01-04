@@ -3,6 +3,12 @@ uuid = "f414f9f6-4662-4c0c-b51e-8ad2ab2a3f20"
 authors = ["Seyoon Ko <kos@ucla.edu> and contributors"]
 version = "0.1.0"
 
+[deps]
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+OpenADMIXTURE = "425c031d-9e5b-441b-a07e-4acde9a966a3"
+SKFR = "a6138be3-5d3e-4f3e-9009-7e37efc59f36"
+SnpArrays = "4e780e97-f5bf-4111-9dc4-b70aaf691b06"
+
 [compat]
 julia = "1.7"
 
