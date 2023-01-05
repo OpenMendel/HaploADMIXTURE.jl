@@ -10,6 +10,7 @@ SKFR = "a6138be3-5d3e-4f3e-9009-7e37efc59f36"
 SnpArrays = "4e780e97-f5bf-4111-9dc4-b70aaf691b06"
 
 [compat]
+LoopVectorization = "0.12"
 julia = "1.7"
 
 [extras]
