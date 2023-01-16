@@ -13,7 +13,14 @@ end
 
 function loglikelihood_full(d, g::AbstractArray{T}, q, p) where T
     I, J, K = d.I, d.J, d.K
-    r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    @time r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+    r
+end
+
+function loglikelihood_full2(d, g::AbstractArray{T}, q, p) where T
+    I, J, K = d.I, d.J, d.K
+    @time r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
     # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
     r
 end
@@ -33,6 +40,8 @@ function em!(d, g::AbstractArray{T}) where T
             end
         end
     end
+    OpenADMIXTURE.project_q!(d.q_next, d.idxv[1])
+    project_p!(d.p_next, d.idx4v[1], K)
     # ll_new = loglikelihood_full(d, g, d.q_next, d.p_next)#; q_=d.q, p_=d.p)
     # @info "em_update: ll_new=$ll_new, ll_prev=$ll_prev $(ll_new > ll_prev)"
 end

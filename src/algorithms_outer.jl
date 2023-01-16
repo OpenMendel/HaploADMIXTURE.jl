@@ -4,7 +4,8 @@ function init_em!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Integer) where T
         em!(d, g)
         d.p .= d.p_next
         d.q .= d.q_next
-        d.ll_new = loglikelihood_full(d, g, d.q, d.p)
+        d.ll_new = loglikelihood_full2(d, g, d.q, d.p)
+        # ll_test = loglikelihood_full2(d, g, d.q, d.p)
         @info "EM iter $i, ll: $(d.ll_new)"
     end
 end
@@ -34,7 +35,7 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
             # copyto_sync!([d_cu.p, d_cu.q], [d.p, d.q])
             # d.ll_new = loglikelihood(d_cu, g_cu)
         else
-            d.ll_new = loglikelihood_full(d, g, d.q, d.p)
+            d.ll_new = loglikelihood_full2(d, g, d.q, d.p)
         end
     end
 
@@ -54,7 +55,7 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
                 #copyto_sync!([d_cu.p, d_cu.q], [d.p_next2, d.q_next2])
                 #loglikelihood(d_cu, g_cu)
             else
-                loglikelihood_full(d, g, d.q_next2, d.p_next2)
+                loglikelihood_full2(d, g, d.q_next2, d.p_next2)
             end
             
             if mode == :ZAL
@@ -79,7 +80,7 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
                 # copyto_sync!([d_cu.p, d_cu.q], [d.p_tmp, d.q_tmp])
                 # loglikelihood(d_cu, g_cu)
             else # CPU mode
-                loglikelihood_full(d, g, d.q_tmp, d.p_tmp)
+                loglikelihood_full2(d, g, d.q_tmp, d.p_tmp)
             end
             if d.ll_prev < ll_qn
                 d.x .= d.x_tmp
