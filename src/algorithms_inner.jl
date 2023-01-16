@@ -13,14 +13,14 @@ end
 
 function loglikelihood_full(d, g::AbstractArray{T}, q, p) where T
     I, J, K = d.I, d.J, d.K
-    @time r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
     # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
     r
 end
 
 function loglikelihood_full2(d, g::AbstractArray{T}, q, p) where T
     I, J, K = d.I, d.J, d.K
-    @time r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
     # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
     r
 end
@@ -75,7 +75,7 @@ function update_q!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T
     # @time if d_cu === nothing # CPU operation
     fill!(XtX, zero(T))
     fill!(Xtz, zero(T))
-    update_q_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+    @time update_q_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
         # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
         #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
     # else # GPU operation
@@ -149,7 +149,7 @@ function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T
     # @time if d_cu === nothing # CPU operation
     fill!(XtX, zero(T))
     fill!(Xtz, zero(T))
-    update_p_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+    @time update_p_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
         # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
         #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
     # else # GPU operation
@@ -160,12 +160,12 @@ function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T
     # end
 
     # Solve the quadratic programs
-    @time begin
+    begin
         Xtz .*= -1 
         pmin = zeros(T, 4K) 
         pmax = ones(T, 4K)
 
-        @threads for j in 1:J
+        @time for j in 1:J
             # even the views are allocating something, so we use preallocated views.
             XtX_ = XtXv[j]
             Xtz_ = Xtzv[j]
