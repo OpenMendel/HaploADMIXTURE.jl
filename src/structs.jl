@@ -142,7 +142,7 @@ Constructor for Admixture information.
 - skipmissing: skip computation of loglikelihood for missing values. Should be kept `true` in most cases
 - rng: Random number generation.
 """
-function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
+function AdmixData2{T}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where T
     NT = nthreads()
     x = convert(Array{T}, rand(rng, K, I + 4J))
     x_next = similar(x)
@@ -158,7 +158,7 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
     x_rr = similar(x_flat)
 
     doublemissing = zeros(Int, 1, I)
-
+    count_double_missing!(doublemissing, g)
     q       = view(x      , :, 1:I)#rand(T, K, J) 
     q       = unsafe_wrap(Array, pointer(q), size(q))
     q_next  = view(x_next , :, 1:I)

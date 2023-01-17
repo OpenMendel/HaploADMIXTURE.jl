@@ -1,10 +1,16 @@
-function init_em!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Integer) where T
-    count_double_missing!(d.doublemissing, g)
+function init_em!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Integer; 
+    d_cu=nothing, g_cu=nothing) where T
     for i in 1:iter
-        em!(d, g)
+        em!(d, g; d_cu=d_cu, g_cu=g_cu)
         d.p .= d.p_next
         d.q .= d.q_next
-        d.ll_new = loglikelihood_full2(d, g, d.q, d.p)
+        if d_cu !== nothing
+            d_cu.p .= d_cu.p_next
+            d_cu.q .= d_cu.q_next
+            d.ll_new = loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
+        else
+            d.ll_new = loglikelihood_full2(d, g, d.q, d.p)
+        end
         # ll_test = loglikelihood_full2(d, g, d.q, d.p)
         @info "EM iter $i, ll: $(d.ll_new)"
     end
@@ -32,8 +38,8 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
     
     if isnan(d.ll_new)
         if d_cu !== nothing
-            # copyto_sync!([d_cu.p, d_cu.q], [d.p, d.q])
-            # d.ll_new = loglikelihood(d_cu, g_cu)
+            OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q, d.p])
+            d.ll_new = loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
         else
             d.ll_new = loglikelihood_full2(d, g, d.q, d.p)
         end
@@ -45,15 +51,15 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
             # qf!(d.qf, d.q, d.f)
             # ll_prev = loglikelihood(g, d.qf)
             d.ll_prev = d.ll_new
-            update_q!(d, g)#; d_cu=d_cu, g_cu=g_cu)
-            update_p!(d, g)#; d_cu=d_cu, g_cu=g_cu)
-            update_q!(d, g, true)#; d_cu=d_cu, g_cu=g_cu)
-            update_p!(d, g, true)#; d_cu=d_cu, g_cu=g_cu)
+            update_q!(d, g; d_cu=d_cu, g_cu=g_cu)
+            update_p!(d, g; d_cu=d_cu, g_cu=g_cu)
+            update_q!(d, g, true; d_cu=d_cu, g_cu=g_cu)
+            update_p!(d, g, true; d_cu=d_cu, g_cu=g_cu)
 
             # qf!(d.qf, d.q_next2, d.f_next2)
             ll_basic = if d_cu !== nothing
-                #copyto_sync!([d_cu.p, d_cu.q], [d.p_next2, d.q_next2])
-                #loglikelihood(d_cu, g_cu)
+                OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_next2, d.q_next2])
+                loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
             else
                 loglikelihood_full2(d, g, d.q_next2, d.p_next2)
             end
@@ -77,8 +83,8 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
             OpenADMIXTURE.project_q!(d.q_tmp, d.idxv[1])
             # qf!(d.qf, d.q_tmp, d.f_tmp)
             ll_qn = if d_cu !== nothing # GPU mode
-                # copyto_sync!([d_cu.p, d_cu.q], [d.p_tmp, d.q_tmp])
-                # loglikelihood(d_cu, g_cu)
+                OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q_tmp, d.p_tmp])
+                loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
             else # CPU mode
                 loglikelihood_full2(d, g, d.q_tmp, d.p_tmp)
             end

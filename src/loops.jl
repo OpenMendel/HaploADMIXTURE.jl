@@ -82,11 +82,6 @@ end
 
 macro coefs_likelihood()
     quote
-        qp00 = qp_small00[i, j]
-        qp01 = qp_small01[i, j]
-        qp10 = qp_small10[i, j]
-        qp11 = qp_small11[i, j]
-
         a1 = g1M * g2M + g11 * g21 * qp00 * qp11 + 
             ((g1M + g10) * (g20 + g21) + g2M * (g10 + g11) + g11 * g20) * qp00 +
             ((g1M + g10 + g11) * g22) * qp01 +
@@ -106,26 +101,26 @@ macro coefs_likelihood()
     end |> esc
 end
 
-macro coefs()
+macro qp_local_cpu()
     quote
         qp00 = qp_small00[i, j]
         qp01 = qp_small01[i, j]
         qp10 = qp_small10[i, j]
         qp11 = qp_small11[i, j]
-        qp00_ = qp_small00_[i, j]
-        qp01_ = qp_small01_[i, j]
-        qp10_ = qp_small10_[i, j]
-        qp11_ = qp_small11_[i, j]
-        a0001 = qp00_ / (qp00_ + qp01_) 
-        a0010 = qp00_ / (qp00_ + qp10_) 
-        a0100 = qp01_ / (qp01_ + qp00_)
-        a0111 = qp01_ / (qp01_ + qp11_)
-        a1000 = qp10_ / (qp10_ + qp00_)
-        a1011 = qp10_ / (qp10_ + qp11_)
-        a1101 = qp11_ / (qp11_ + qp01_)
-        a1110 = qp11_ / (qp11_ + qp10_)
-        ahet0011 = qp00_ * qp11_ / (qp00_ * qp11_ + qp01_ * qp10_)
-        ahet0110 = qp01_ * qp10_ / (qp00_ * qp11_ + qp01_ * qp10_)
+    end |> esc
+end
+macro coefs()
+    quote
+        a0001 = qp00 / (qp00 + qp01) 
+        a0010 = qp00 / (qp00 + qp10) 
+        a0100 = qp01 / (qp01 + qp00)
+        a0111 = qp01 / (qp01 + qp11)
+        a1000 = qp10 / (qp10 + qp00)
+        a1011 = qp10 / (qp10 + qp11)
+        a1101 = qp11 / (qp11 + qp01)
+        a1110 = qp11 / (qp11 + qp10)
+        ahet0011 = qp00 * qp11 / (qp00 * qp11 + qp01 * qp10)
+        ahet0110 = qp01 * qp10 / (qp00 * qp11 + qp01 * qp10)
         
         c00 = zero(T)
         c00 += g11 * g21 * ahet0011
@@ -228,6 +223,7 @@ function loglikelihood_full_loop2(g::AbstractArray{T}, q, p, qp_small00, qp_smal
             end : begin 
                 @gcoefs_numeric
             end
+            @qp_local_cpu
             @coefs_likelihood
             r += log(a1 + a2) + log(b1 + b2)
         end
@@ -235,8 +231,7 @@ function loglikelihood_full_loop2(g::AbstractArray{T}, q, p, qp_small00, qp_smal
     return r
 end
 
-function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K;
-    q_=q, p_=p, qp_small00_=qp_small00, qp_small01_=qp_small01, qp_small10_=qp_small10, qp_small11_=qp_small11) where T
+function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K) where T
     oneT = one(T)
     twoT = 2one(T)
     firsti, firstj = first(irange), first(jrange)
@@ -246,9 +241,6 @@ function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, q
     r11 = zero(Float64)
 
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    if !(q_ === q && p_ === p)
-        qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
-    end
     @inbounds for j in jrange
         for i in irange     
             typeof(g) <: SnpLinAlg ? begin 
@@ -257,8 +249,8 @@ function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, q
             end : begin 
                 @gcoefs_numeric
             end
-            @coefs
-            
+            @qp_local_cpu
+            @coefs   
             r00 += c00 * log(qp00)
             r01 += c01 * log(qp01)
             r10 += c10 * log(qp10)
@@ -268,13 +260,13 @@ function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, q
     r00 + r01 + r10 + r11
 end
 
-function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K;
-    q_=q, p_=p, qp_small00_=qp_small00, qp_small01_=qp_small01, qp_small10_=qp_small10, qp_small11_=qp_small11) where T
+function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+    irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    if !(q_ === q && p_ === p)
-        qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
-    end
+    # if !(q_ === q && p_ === p)
+    #     qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
+    # end
     @inbounds for j in jrange
         for i in irange
             typeof(g) <: SnpLinAlg ? begin 
@@ -283,6 +275,7 @@ function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_smal
             end : begin 
                 @gcoefs_numeric
             end
+            @qp_local_cpu
             @coefs
             for k in 1:K
                 q_next[k, i] += c00 * q[k, i] * p[k, 4(j-1)+1] / qp00
@@ -298,13 +291,13 @@ function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_smal
     end
 end
 
-function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K;
-    q_=q, p_=p, qp_small00_=qp_small00, qp_small01_=qp_small01, qp_small10_=qp_small10, qp_small11_=qp_small11) where T
+function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+    irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    if !(q_ === q && p_ === p)
-        qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
-    end
+    # if !(q_ === q && p_ === p)
+    #     qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
+    # end
     @inbounds for j in jrange
         for i in irange
             typeof(g) <: SnpLinAlg ? begin 
@@ -313,6 +306,7 @@ function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_smal
             end : begin 
                 @gcoefs_numeric
             end
+            @qp_local_cpu
             @coefs
             for k in 1:K
                 Xtz[k, i] += c00 * p[k, 4(j-1)+1] / qp00
@@ -331,13 +325,13 @@ function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_smal
     end
 end
 
-function update_p_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K;
-    q_=q, p_=p, qp_small00_=qp_small00, qp_small01_=qp_small01, qp_small10_=qp_small10, qp_small11_=qp_small11) where T
+function update_p_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+    irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    if !(q_ === q && p_ === p)
-        qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
-    end
+    # if !(q_ === q && p_ === p)
+    #     qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
+    # end
     @inbounds for j in jrange
         for i in irange
             typeof(g) <: SnpLinAlg ? begin 
@@ -346,6 +340,7 @@ function update_p_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_smal
             end : begin 
                 @gcoefs_numeric
             end
+            @qp_local_cpu
             @coefs
             for k in 1:K
                 Xtz[k, 4(j-1)+1] += c00 * q[k, i] / qp00

@@ -1,15 +1,9 @@
-function loglikelihood(d, g::AbstractArray{T}, q, p; q_=q, p_=p) where T
-    I, J, K = d.I, d.J, d.K
-    qp_small00_ = (q_ === q && p_ === p) ? d.qp_small00 : d.qp_small00_
-    qp_small01_ = (q_ === q && p_ === p) ? d.qp_small01 : d.qp_small01_
-    qp_small10_ = (q_ === q && p_ === p) ? d.qp_small10 : d.qp_small10_
-    qp_small11_ = (q_ === q && p_ === p) ? d.qp_small11 : d.qp_small11_
-    r = loglikelihood_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K;
-        q_=q, p_=p, 
-        qp_small00_=qp_small00_, qp_small01_=qp_small01_, qp_small10_=qp_small10_, qp_small11_=qp_small11_)
-    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
-    r
-end
+# function loglikelihood(d, g::AbstractArray{T}, q, p) where T
+#     I, J, K = d.I, d.J, d.K
+#     r = loglikelihood_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+#     # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+#     r
+# end
 
 function loglikelihood_full(d, g::AbstractArray{T}, q, p) where T
     I, J, K = d.I, d.J, d.K
@@ -22,15 +16,21 @@ function loglikelihood_full2(d, g::AbstractArray{T}, q, p) where T
     I, J, K = d.I, d.J, d.K
     r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
     # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
-    r
+    r 
 end
 
-function em!(d, g::AbstractArray{T}) where T
+function em!(d, g::AbstractArray{T}; d_cu=nothing, g_cu=nothing) where T
     I, J, K = d.I, d.J, d.K
     # ll_prev = loglikelihood_full(d, g, d.q, d.p)
-    fill!(d.q_next, zero(T))
-    fill!(d.p_next, zero(T))
-    em_loop!(d.q_next, d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    if d_cu !== nothing
+        OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q, d.p])
+        em!(d_cu, g_cu)
+        OpenADMIXTURE.copyto_sync!([d.q_next, d.p_next], [d_cu.q_next, d_cu.p_next])
+    else
+        fill!(d.q_next, zero(T))
+        fill!(d.p_next, zero(T))
+        em_loop!(d.q_next, d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    end
     d.q_next ./= 2(J .- d.doublemissing)
     @inbounds for j in 1:J
         for k in 1:K
@@ -42,6 +42,9 @@ function em!(d, g::AbstractArray{T}) where T
     end
     OpenADMIXTURE.project_q!(d.q_next, d.idxv[1])
     project_p!(d.p_next, d.idx4v[1], K)
+    if d_cu !== nothing
+        OpenADMIXTURE.copyto_sync!([d_cu.q_next, d_cu.p_next], [d.q_next, d.p_next])  
+    end
     # ll_new = loglikelihood_full(d, g, d.q_next, d.p_next)#; q_=d.q, p_=d.p)
     # @info "em_update: ll_new=$ll_new, ll_prev=$ll_prev $(ll_new > ll_prev)"
 end
@@ -57,8 +60,8 @@ Update Q using sequential quadratic programming.
 - `d_cu`: a `CuAdmixData` if using GPU, `nothing` otherwise.
 - `g_cu`: a `CuMatrix{UInt8}` corresponding to the data part of 
 """
-function update_q!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T#; d_cu=nothing, g_cu=nothing) where T
-# function update_q!(q_next, g::AbstractArray{T}, q, p, qdiff, XtX, Xtz, qf) where T
+function update_q!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false;
+    d_cu=nothing, g_cu=nothing) where T
     I, J, K = d.I, d.J, d.K
     qdiff, XtX, Xtz, qp_small00, qp_small01, qp_small10, qp_small11 = d.q_tmp, d.XtX_q, d.Xtz_q, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11
     q_next = update2 ? d.q_next2 : d.q_next
@@ -72,18 +75,20 @@ function update_q!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T
     # qf!(qp, q, f)
     # ll_prev = loglikelihood_full(d, g, q, p) # loglikelihood(g, qf)
     # println(d.ll_prev)
-    # @time if d_cu === nothing # CPU operation
-    fill!(XtX, zero(T))
-    fill!(Xtz, zero(T))
-    @time update_q_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+    @time if d_cu === nothing # CPU operation
+        fill!(XtX, zero(T))
+        fill!(Xtz, zero(T))
+        update_q_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
         # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
         #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
-    # else # GPU operation
-    #     @assert d.skipmissing "`skipmissing`` must be true for GPU computation"
-    #     copyto_sync!([d_cu.q, d_cu.p], [q, p])
-    #     update_q_cuda!(d_cu, g_cu)
-    #     copyto_sync!([XtX, Xtz], [d_cu.XtX_q, d_cu.Xtz_q])
-    # end
+    else # GPU operation
+        OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [q, p])
+        update_q_cuda!(d_cu, g_cu)
+        OpenADMIXTURE.copyto_sync!([XtX, Xtz], [d_cu.XtX_q, d_cu.Xtz_q])
+    end
+
+    println(sum(XtX))
+    println(sum(Xtz))
 
     # Solve the quadratic programs
     @time begin
@@ -131,8 +136,8 @@ Update Q using sequential quadratic programming.
 - `d_cu`: a `CuAdmixData` if using GPU, `nothing` otherwise.
 - `g_cu`: a `CuMatrix{UInt8}` corresponding to the data part of 
 """
-function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T#; d_cu=nothing, g_cu=nothing) where T
-# function update_q!(q_next, g::AbstractArray{T}, q, p, qdiff, XtX, Xtz, qf) where T
+function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false;
+    d_cu=nothing, g_cu=nothing) where T
     I, J, K = d.I, d.J, d.K
     pdiff, XtX, Xtz, qp_small00, qp_small01, qp_small10, qp_small11 = d.p_tmp, d.XtX_p, d.Xtz_p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11
     p_next = update2 ? d.p_next2 : d.p_next
@@ -146,18 +151,17 @@ function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false) where T
     # qf!(qp, q, f)
     # ll_prev = loglikelihood_full(d, g, q, p) # loglikelihood(g, qf)
     # println(d.ll_prev)
-    # @time if d_cu === nothing # CPU operation
-    fill!(XtX, zero(T))
-    fill!(Xtz, zero(T))
-    @time update_p_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+    @time if d_cu === nothing # CPU operation
+        fill!(XtX, zero(T))
+        fill!(Xtz, zero(T))
+        update_p_loop!(XtX, Xtz, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
         # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
         #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
-    # else # GPU operation
-    #     @assert d.skipmissing "`skipmissing`` must be true for GPU computation"
-    #     copyto_sync!([d_cu.q, d_cu.p], [q, p])
-    #     update_q_cuda!(d_cu, g_cu)
-    #     copyto_sync!([XtX, Xtz], [d_cu.XtX_q, d_cu.Xtz_q])
-    # end
+    else # GPU operation
+        OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [q, p])
+        update_p_cuda!(d_cu, g_cu)
+        OpenADMIXTURE.copyto_sync!([XtX, Xtz], [d_cu.XtX_p, d_cu.Xtz_p])
+    end
 
     # Solve the quadratic programs
     begin
