@@ -96,7 +96,7 @@ function update_q!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false;
         pmin = zeros(T, K) 
         pmax = ones(T, K) 
 
-        @threads for i in 1:I
+        @time for i in 1:I
             # even the views are allocating something, so we use preallocated views.
             XtX_ = XtXv[i]
             Xtz_ = Xtzv[i]
@@ -163,6 +163,9 @@ function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false;
         OpenADMIXTURE.copyto_sync!([XtX, Xtz], [d_cu.XtX_p, d_cu.Xtz_p])
     end
 
+    println(sum(XtX))
+    println(sum(Xtz))
+
     # Solve the quadratic programs
     begin
         Xtz .*= -1 
@@ -196,17 +199,25 @@ function update_p!(d::AdmixData2{T}, g::AbstractArray{T}, update2=false;
             tmp_5k1_ = d.tmp_5k1_v[t]
             swept = d.swept_4kv[t]
             
+            # println(j)
             OpenADMIXTURE.create_tableau!(tableau_5k1, tmp_XtX_full, Xtz_, p_, d.v_4k4k, tmp_k, false, true; 
                 tmp_4k_k=d.tmp_4k_kv[t], tmp_4k_k_2=d.tmp_4k_k_2v[t])
+            # if j == 2921
+            #     println(tableau_5k1)
+            # end
+            verbose = (j == 2921)
             OpenADMIXTURE.quadratic_program!(pdiff_, tableau_5k1, p_, pmin, pmax, 4K, K, 
-                tmp_5k1, tmp_5k1_, swept)
+                tmp_5k1, tmp_5k1_, swept; verbose=verbose)
         end
+        println("Check3: ", sum(pdiff))
+        println(sum(isnan.(pdiff)))
         @inbounds for j in 1:4J
             for k in 1:K
                 p_next[k, j] = p[k, j] + pdiff[k, j]
             end
         end
         project_p!(p_next, d.idx4v[1], K)
+        println("Check4: ", sum(p_next))
     end
     # ll_new = loglikelihood_full(d, g, q, p_next)#; q_=q, p_=p)
     # @info "p_update: ll_new=$ll_new, ll_prev=$ll_prev $(ll_new > ll_prev)"
