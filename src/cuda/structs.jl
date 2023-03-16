@@ -13,7 +13,7 @@ struct CuAdmixData{T}
     Xtz_p::CuArray{T, 2}
     doublemissing::CuArray{T, 2}
 end
-function CuAdmixData(d::AdmixData2{T}, g::SnpLinAlg{T}, width=d.J) where T
+function CuAdmixData(d::AdmixData2{T, T2}, g::SnpLinAlg{T2}, width=d.J) where {T, T2}
     I, J, K = d.I, d.J, d.K
     Ibytes = (I + 3) ÷ 4
     q = CuArray{T, 2}(undef, K, I)
@@ -28,13 +28,17 @@ function CuAdmixData(d::AdmixData2{T}, g::SnpLinAlg{T}, width=d.J) where T
     Xtz_q = CuArray{T, 2}(undef, K, I)
     XtX_p = CuArray{T, 3}(undef, K, K, 4J)
     Xtz_p = CuArray{T, 2}(undef, K, 4J)
-    CuAdmixData{T}(I, J, K, q, q_next, p, p_next, XtX_q, Xtz_q, XtX_p, Xtz_p, doublemissing)
+    CuAdmixData{T2}(I, J, K, q, q_next, p, p_next, XtX_q, Xtz_q, XtX_p, Xtz_p, doublemissing)
 end
 
-function _cu_admixture_base(d::AdmixData2, g_la::SnpLinAlg, I::Int, J::Int)
+function _cu_admixture_base(d::AdmixData2{T, T2}, g_la::SnpLinAlg{T2}, I::Int, J::Int) where {T, T2}
     d_cu = CuAdmixData(d, g_la)
     Ibytes = (I + 3) ÷ 4
     g_cu = CuArray{UInt8, 2}(undef, Ibytes, 2J)
-    copyto!(g_cu, @view(g_la.s.data[:, 1:2J]))
+    if 2J == size(g_la, 2)
+        copyto!(g_cu, g_la.s.data)
+    else
+        copyto!(g_cu, @view(g_la.s.data[:, 1:2J]))
+    end
     d_cu, g_cu
 end

@@ -1,5 +1,5 @@
-function init_em!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Integer; 
-    d_cu=nothing, g_cu=nothing) where T
+function init_em!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Integer; 
+    d_cu=nothing, g_cu=nothing) where {T, T2}
     for i in 1:iter
         em!(d, g; d_cu=d_cu, g_cu=g_cu)
         d.p .= d.p_next
@@ -30,8 +30,8 @@ Initialize P and Q with the FRAPPE EM algorithm
 - `g_cu`: a `CuMatrix{UInt8}` corresponding to the data part of genotype matrix
 - `mode`: `:ZAL` for Zhou-Alexander-Lange acceleration (2009), `:LBQN` for Agarwal-Xu (2020). 
 """
-function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000, 
-    rtol= 1e-7; d_cu=nothing, g_cu=nothing, mode=:ZAL, iter_count_offset=0) where T
+function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=1000, 
+    rtol= 1e-7; d_cu=nothing, g_cu=nothing, mode=:ZAL, iter_count_offset=0) where {T, T2}
     # qf!(d.qf, d.q, d.f)
     # ll_prev = loglikelihood(g, d.q, d.f, d.qp_small, d.K, d.skipmissing)
     # d.ll_new = ll_prev
@@ -58,7 +58,9 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
 
             # qf!(d.qf, d.q_next2, d.f_next2)
             ll_basic = if d_cu !== nothing
-                OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_next2, d.q_next2])
+                d.q_T2 .= d.q_next2
+                d.p_T2 .= d.p_next2
+                OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_T2, d.q_T2])
                 loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
             else
                 loglikelihood_full2(d, g, d.q_next2, d.p_next2)
@@ -83,7 +85,9 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
             OpenADMIXTURE.project_q!(d.q_tmp, d.idxv[1])
             # qf!(d.qf, d.q_tmp, d.f_tmp)
             ll_qn = if d_cu !== nothing # GPU mode
-                OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q_tmp, d.p_tmp])
+                d.q_T2 .= d.q_tmp
+                d.p_T2 .= d.p_tmp
+                OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q_T2, d.p_T2])
                 loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
             else # CPU mode
                 loglikelihood_full2(d, g, d.q_tmp, d.p_tmp)
@@ -95,13 +99,13 @@ function admixture_qn!(d::AdmixData2{T}, g::AbstractArray{T}, iter::Int=1000,
                 d.x .= d.x_next2
                 d.ll_new = ll_basic
             end
-            println(ll_basic)
-            println(ll_qn)
             reldiff = abs((d.ll_new - d.ll_prev) / d.ll_prev)
             @info "Iteration $i: ll=$(d.ll_new), reldiff = $reldiff, ll_basic=$ll_basic, ll_qn=$ll_qn"
             if reldiff < rtol
                 break
             end
+            flush(stdout)
+            flush(stderr)
         end
         println()
         println()
