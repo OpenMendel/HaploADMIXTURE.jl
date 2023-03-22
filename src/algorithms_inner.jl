@@ -180,19 +180,19 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
 
     # Solve the quadratic programs
     @time begin
+        rho = convert(T, 1e7)
         Xtz .*= -1 
         pmin = zeros(T, 4K) 
         pmax = ones(T, 4K)
-
-        @threads for j in 1:J
+        @batch threadlocal=QPThreadLocal{T}(K) for j in 1:J
             # even the views are allocating something, so we use preallocated views.
             XtX_ = XtXv[j]
             Xtz_ = Xtzv[j]
             p_ = pv[j]
             pdiff_ = pdiffv[j]
 
-            t = threadid()
-            tmp_XtX_full = d.tmp_XtX_pv[t]
+            # t = threadid()
+            tmp_XtX_full = threadlocal.tmp_XtX_p
 
             # copy block-diagonal hessians. 
             fill!(tmp_XtX_full, zero(T))
@@ -205,23 +205,34 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                 end
             end
 
-            tableau_5k1 = d.tableau_5k1v[t]
-            tmp_k = d.tmp_kv[t]
-            tmp_5k1 = d.tmp_5k1v[t]
-            tmp_5k1_ = d.tmp_5k1_v[t]
-            swept = d.swept_4kv[t]
+            # for l2 in 1:4
+            #     for l in 1:4
+            #         for k in 1:K
+            #             tmp_XtX_full[(l-1) * K + k, (l2-1) * K + k] += rho
+            #         end
+            #     end
+            # end
+
+            tableau_5k1 = threadlocal.tableau_5k1
+            tableau_4k1 = threadlocal.tableau_4k1
+            tmp_k = threadlocal.tmp_k
+            tmp_4k1 = threadlocal.tmp_4k1
+            tmp_4k1_ = threadlocal.tmp_4k1_
+            tmp_5k1 = threadlocal.tmp_5k1
+            tmp_5k1_ = threadlocal.tmp_5k1_
+            swept = threadlocal.swept_4k
             
             verbose = false
+            # OpenADMIXTURE.create_tableau!(tableau_4k1, tmp_XtX_full, Xtz_, p_, d.v_4k4k, tmp_k, false)
+            # OpenADMIXTURE.quadratic_program!(pdiff_, tableau_4k1, p_, pmin, pmax, 4K, 0,
+            #     tmp_4k1, tmp_4k1_, swept)
             OpenADMIXTURE.create_tableau!(tableau_5k1, tmp_XtX_full, Xtz_, p_, d.v_4k4k, tmp_k, false, true; 
-            tmp_4k_k=d.tmp_4k_kv[t], tmp_4k_k_2=d.tmp_4k_k_2v[t], verbose=verbose)
-            try
-                OpenADMIXTURE.quadratic_program!(pdiff_, tableau_5k1, p_, pmin, pmax, 4K, K, 
-                    tmp_5k1, tmp_5k1_, swept; verbose=verbose)
-            catch e
-                println("Error on variant $j")
-                throw(e)
-            end
+                tmp_4k_k=threadlocal.tmp_4k_k, tmp_4k_k_2=threadlocal.tmp_4k_k_2, verbose=verbose)
+            OpenADMIXTURE.quadratic_program!(pdiff_, tableau_5k1, p_, pmin, pmax, 4K, K, 
+                tmp_5k1, tmp_5k1_, swept; verbose=verbose)
+
         end
+        
         @inbounds for j in 1:4J
             for k in 1:K
                 p_next[k, j] = p[k, j] + pdiff[k, j]
