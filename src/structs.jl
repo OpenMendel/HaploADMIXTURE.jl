@@ -185,11 +185,14 @@ function AdmixData2{T,T2}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where {T, T2}
     p_next2 = unsafe_wrap(Array, pointer(p_next2), size(p_next2))
     p_tmp   = view(x_tmp, :, (I+1):(I+4J))
     p_tmp   = unsafe_wrap(Array, pointer(p_tmp), size(p_tmp))
-    @inbounds for j in 1:J
+    for j in 1:J
         for k in 1:K
-            s = p[k, 4(j-1)+1] + p[k, 4(j-1)+2] + p[k, 4(j-1)+3] + p[k, 4(j-1)+4]
+            s = zero(T)
             for l in 1:4
-                p[k, 4(j-1)+l] /= s
+                s += p[k, 4(j-1)+l]
+            end
+            for l in 1:4
+                p[k, 4(j-1)+l] = p[k, 4(j-1)+l] / s
             end
         end
     end
@@ -357,6 +360,8 @@ end
 
 struct QPThreadLocal{T}
     tmp_k   :: Vector{T}
+    tmp_k1  :: Vector{T}
+    tmp_k1_ :: Vector{T}
     tmp_k2  :: Vector{T}
     tmp_k2_ :: Vector{T}
     tmp_XtX_p :: Matrix{T}
@@ -366,6 +371,7 @@ struct QPThreadLocal{T}
     tmp_4k1_ :: Vector{T}
     tmp_5k1 :: Vector{T}
     tmp_5k1_ :: Vector{T}
+    tableau_k1 :: Matrix{T}
     tableau_k2 :: Matrix{T}
     tableau_4k1 :: Matrix{T}
     tableau_5k1 :: Matrix{T}
@@ -376,6 +382,8 @@ struct QPThreadLocal{T}
 end
 function QPThreadLocal{T}(K::Int) where T
     tmp_k = Vector{T}(undef, K)
+    tmp_k1 = Vector{T}(undef, K+1)
+    tmp_k1_ = Vector{T}(undef, K+1)
     tmp_k2 = Vector{T}(undef, K+2)
     tmp_k2_ = similar(tmp_k2)
     tmp_XtX_p = Array{T, 2}(undef, 4K, 4K)
@@ -385,6 +393,7 @@ function QPThreadLocal{T}(K::Int) where T
     tmp_4k1_ = similar(tmp_4k1) 
     tmp_5k1 = Vector{T}(undef, 5K+1)
     tmp_5k1_ = similar(tmp_5k1)
+    tableau_k1 = Array{T, 2}(undef, K+1, K+1)
     tableau_k2 = Array{T, 2}(undef, K+2, K+2)
     tableau_4k1 = Array{T, 2}(undef, 4K+1, 4K+1)
     tableau_5k1 = Array{T, 2}(undef, 5K+1, 5K+1)
@@ -392,6 +401,7 @@ function QPThreadLocal{T}(K::Int) where T
     swept_4k = convert(Vector{Bool}, trues(4K))
     idx = Array{Int}(undef, K)
     idx4 = Array{Int}(undef, 4)
-    QPThreadLocal{T}(tmp_k, tmp_k2, tmp_k2_, tmp_XtX_p, tmp_4k_k, tmp_4k_k_2, tmp_4k1, tmp_4k1_, tmp_5k1, tmp_5k1_, 
-        tableau_k2, tableau_4k1, tableau_5k1, swept, swept_4k, idx, idx4)
+    QPThreadLocal{T}(tmp_k, tmp_k1, tmp_k1_, tmp_k2, tmp_k2_, tmp_XtX_p, 
+        tmp_4k_k, tmp_4k_k_2, tmp_4k1, tmp_4k1_, tmp_5k1, tmp_5k1_, 
+        tableau_k1, tableau_k2, tableau_4k1, tableau_5k1, swept, swept_4k, idx, idx4)
 end
