@@ -35,7 +35,7 @@ Initialize P and Q with the FRAPPE EM algorithm
 """
 function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=1000, 
     rtol= 1e-7; d_cu=nothing, g_cu=nothing, mode=:ZAL, iter_count_offset=0, penalty=nothing, 
-    fix_q=false, fix_p=false) where {T, T2}
+    fix_q=false, fix_p=false, em_p=false, em_p_iter=10) where {T, T2}
     # qf!(d.qf, d.q, d.f)
     # ll_prev = loglikelihood(g, d.q, d.f, d.qp_small, d.K, d.skipmissing)
     # d.ll_new = ll_prev
@@ -70,7 +70,20 @@ function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=100
                 d.q_next .= d.q
             end
             if !fix_p
-                update_p!(d, g; d_cu=d_cu, g_cu=g_cu, penalty=p_penalty)
+                if !em_p
+                    update_p!(d, g; d_cu=d_cu, g_cu=g_cu, penalty=p_penalty)
+                else
+                    for ii in 1:em_p_iter
+                        em!(d, g; d_cu=d_cu, g_cu=g_cu, fix_q=true, fix_p=false)
+                        d.p_next .= d.p
+                        em!(d, g; d_cu=d_cu, g_cu=g_cu, fix_q=true, fix_p=false)
+                        d.p_tmp .= d.p
+                        OpenADMIXTURE.update_UV!(d.U_p, d.V_p, d.p_flat, d.p_next_flat, d.p_tmp_flat, ii, d.Q)
+                        U_part = ii < d.Q ? view(d.U_p, :, 1:i) : view(d.U_p, :, :)
+                        V_part = ii < d.Q ? view(d.V_p, :, 1:i) : view(d.V_p, :, :)
+                        OpenADMIXTURE.update_QN!(d.p_tmp_flat, d.p_next_flat, d.p_flat, U_part, V_part)
+                    end
+                end
             else
                 d.p_next .= d.p
             end
@@ -80,7 +93,20 @@ function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=100
                 d.q_next2 .= d.q
             end
             if !fix_p
-                update_p!(d, g, true; d_cu=d_cu, g_cu=g_cu, penalty=p_penalty)
+                if !em_p
+                    update_p!(d, g, true; d_cu=d_cu, g_cu=g_cu, penalty=p_penalty)
+                else
+                    for ii in 1:em_p_iter
+                        em!(d, g; d_cu=d_cu, g_cu=g_cu, fix_q=true, fix_p=false)
+                        d.p_next2 .= d.p
+                        em!(d, g; d_cu=d_cu, g_cu=g_cu, fix_q=true, fix_p=false)
+                        d.p_tmp .= d.p
+                        OpenADMIXTURE.update_UV!(d.U_p, d.V_p, d.p_flat, d.p_next2_flat, d.p_tmp_flat, ii, d.Q)
+                        U_part = ii < d.Q ? view(d.U_p, :, 1:i) : view(d.U_p, :, :)
+                        V_part = ii < d.Q ? view(d.V_p, :, 1:i) : view(d.V_p, :, :)
+                        OpenADMIXTURE.update_QN!(d.p_tmp_flat, d.p_next2_flat, d.p_flat, U_part, V_part)
+                    end
+                end
             else
                 d.p_next2 .= d.p
             end

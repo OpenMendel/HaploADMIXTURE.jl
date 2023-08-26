@@ -27,7 +27,11 @@ function em!(d::AdmixData2{T, T2}, g::AbstractArray{T2}; d_cu=nothing, g_cu=noth
         d.q_T2 .= d.q
         d.p_T2 .= d.p
         OpenADMIXTURE.copyto_sync!([d_cu.q, d_cu.p], [d.q_T2, d.p_T2])
-        em!(d_cu, g_cu)
+        if !fix_q
+            em!(d_cu, g_cu)
+        else
+            em_p!(d_cu, g_cu)
+        end
         OpenADMIXTURE.copyto_sync!([d.q_T2, d.p_T2], [d_cu.q_next, d_cu.p_next])
         if !fix_q
             d.q_next .= d.q_T2
@@ -42,7 +46,11 @@ function em!(d::AdmixData2{T, T2}, g::AbstractArray{T2}; d_cu=nothing, g_cu=noth
     else
         fill!(d.q_next, zero(T))
         fill!(d.p_next, zero(T))
-        em_loop!(d.q_next, d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+        if !fix_q
+            em_loop!(d.q_next, d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+        else
+            em_p_loop!(d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+        end
         if !fix_q
             d.q_next .= d.q_T2
         else 

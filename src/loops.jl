@@ -308,6 +308,32 @@ function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_smal
     end
 end
 
+function em_p_loop!(p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+    irange, jrange, K; fix_p=false, fix_q=false) where T
+    firsti, firstj = first(irange), first(jrange)
+    qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
+    @inbounds for j in jrange
+        for i in irange
+            typeof(g) <: SnpLinAlg ? begin 
+                gmat = g.s.data
+                @gcoefs_snparray
+            end : begin 
+                @gcoefs_numeric
+            end
+            @qp_local_cpu
+            @coefs
+            for k in 1:K
+                if !fix_p
+                    p_next[k, 4(j-1)+1] += c00 * q[k, i] * p[k, 4(j-1)+1] / qp00
+                    p_next[k, 4(j-1)+2] += c01 * q[k, i] * p[k, 4(j-1)+2] / qp01
+                    p_next[k, 4(j-1)+3] += c10 * q[k, i] * p[k, 4(j-1)+3] / qp10
+                    p_next[k, 4j      ] += c11 * q[k, i] * p[k, 4j      ] / qp11
+                end
+            end
+        end
+    end
+end
+
 function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
     irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
