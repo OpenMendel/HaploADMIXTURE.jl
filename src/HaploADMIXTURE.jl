@@ -6,6 +6,8 @@ import LinearAlgebra: svd
 using OpenADMIXTURE
 using Requires, Adapt
 using Polyester
+using LoopVectorization
+using Random
 function __init__()
     @require CUDA="052768ef-5323-5732-b1bb-66c8b64840ba" begin
         using .CUDA
