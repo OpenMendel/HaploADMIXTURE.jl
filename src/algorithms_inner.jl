@@ -5,17 +5,24 @@
 #     r
 # end
 
+import OpenADMIXTURE: tiler_scalar, threader_scalar
+
 function loglikelihood_full(d::AdmixData2{T, T2}, g::AbstractArray{T2}, q, p) where {T, T2}
     I, J, K = d.I, d.J, d.K
-    r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
-    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+    # r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    tid = Threads.threadid()
+
+    r = threader_scalar(loglikelihood_full_loop, typeof(qp_small00), zero(T), (g, q, p, 
+        d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K)
     r
 end
 
 function loglikelihood_full2(d::AdmixData2{T, T2}, g::AbstractArray{T2}, q, p) where {T, T2}
     I, J, K = d.I, d.J, d.K
-    r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
-    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+    tid = Threads.threadid()
+    r = threader_scalar(loglikelihood_full_loop2, typeof(d.qp_small00[1]), zero(T), (g, q, p, 
+        d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K)
+    # r = loglikelihood_full_loop2(g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
     r 
 end
 
