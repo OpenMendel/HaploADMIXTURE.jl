@@ -18,18 +18,18 @@ Compute a block of the matrix Q x P.
     qp_small11::AbstractArray{T},
     q, p, irange, jrange, K) where T
     tid = threadid()
-    fill!(view(qp_small00, :, :, tid), zero(T))
-    fill!(view(qp_small01, :, :, tid), zero(T))
-    fill!(view(qp_small10, :, :, tid), zero(T))
-    fill!(view(qp_small11, :, :, tid), zero(T))
+    fill!(qp_small00, zero(T))
+    fill!(qp_small01, zero(T))
+    fill!(qp_small10, zero(T))
+    fill!(qp_small11, zero(T))
     firsti, firstj = first(irange), first(jrange)
     @inbounds for j in jrange
         for i in irange
             for k in 1:K
-                qp_small00[i-firsti+1, j-firstj+1, tid] += q[k, i] * p[k, 4(j-1) + 1]
-                qp_small01[i-firsti+1, j-firstj+1, tid] += q[k, i] * p[k, 4(j-1) + 2]
-                qp_small10[i-firsti+1, j-firstj+1, tid] += q[k, i] * p[k, 4(j-1) + 3]
-                qp_small11[i-firsti+1, j-firstj+1, tid] += q[k, i] * p[k, 4j]
+                qp_small00[i-firsti+1, j-firstj+1] += q[k, i] * p[k, 4(j-1) + 1]
+                qp_small01[i-firsti+1, j-firstj+1] += q[k, i] * p[k, 4(j-1) + 2]
+                qp_small10[i-firsti+1, j-firstj+1] += q[k, i] * p[k, 4(j-1) + 3]
+                qp_small11[i-firsti+1, j-firstj+1] += q[k, i] * p[k, 4j]
             end
         end
     end  
@@ -105,10 +105,10 @@ end
 
 macro qp_local_cpu()
     quote
-        qp00 = qp_small00[i, j]
-        qp01 = qp_small01[i, j]
-        qp10 = qp_small10[i, j]
-        qp11 = qp_small11[i, j]
+        qp00 = qp_small00[i-firsti+1, j-firstj+1]
+        qp01 = qp_small01[i-firsti+1, j-firstj+1]
+        qp10 = qp_small10[i-firsti+1, j-firstj+1]
+        qp11 = qp_small11[i-firsti+1, j-firstj+1]
     end |> esc
 end
 macro coefs()
@@ -211,10 +211,15 @@ function loglikelihood_full_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small
     return r
 end
 
-function loglikelihood_full_loop2(g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K) where T
+function loglikelihood_full_loop2(g::AbstractArray{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, irange, jrange, K) where T
     oneT = one(T)
     twoT = 2one(T)
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     r = zero(T)
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
     @inbounds for j in jrange
@@ -228,10 +233,15 @@ function loglikelihood_full_loop2(g::AbstractArray{T}, q, p, qp_small00, qp_smal
     return r
 end
 
-function loglikelihood_full_loop2(g::SnpLinAlg{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K) where T
+function loglikelihood_full_loop2(g::SnpLinAlg{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, irange, jrange, K) where T
     oneT = one(T)
     twoT = 2one(T)
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     r = zero(T)
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
     gmat = g.s.data
@@ -247,40 +257,16 @@ function loglikelihood_full_loop2(g::SnpLinAlg{T}, q, p, qp_small00, qp_small01,
     return r
 end
 
-function loglikelihood_loop(g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, irange, jrange, K) where T
-    oneT = one(T)
-    twoT = 2one(T)
-    firsti, firstj = first(irange), first(jrange)
-    r00 = zero(Float64)
-    r01 = zero(Float64)
-    r10 = zero(Float64)
-    r11 = zero(Float64)
-
-    qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    @inbounds for j in jrange
-        for i in irange     
-            typeof(g) <: SnpLinAlg ? begin 
-                gmat = g.s.data
-                @gcoefs_snparray
-            end : begin 
-                @gcoefs_numeric
-            end
-            @qp_local_cpu
-            @coefs   
-            r00 += c00 * log(qp00)
-            r01 += c01 * log(qp01)
-            r10 += c10 * log(qp10)
-            r11 += c11 * log(qp11)   
-        end
-    end
-    r00 + r01 + r10 + r11
-end
-
-function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, 
     irange, jrange, K; fix_p=false, fix_q=false) where T
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
-    @inbounds for j in jrange
+    for j in jrange
         for i in irange
             typeof(g) <: SnpLinAlg ? begin 
                 gmat = g.s.data
@@ -308,9 +294,14 @@ function em_loop!(q_next, p_next, g::AbstractArray{T}, q, p, qp_small00, qp_smal
     end
 end
 
-function em_p_loop!(p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+function em_p_loop!(p_next, g::AbstractArray{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, 
     irange, jrange, K; fix_p=false, fix_q=false) where T
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
     @inbounds for j in jrange
         for i in irange
@@ -334,9 +325,14 @@ function em_p_loop!(p_next, g::AbstractArray{T}, q, p, qp_small00, qp_small01, q
     end
 end
 
-function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, 
     irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
     # if !(q_ === q && p_ === p)
     #     qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)
@@ -368,9 +364,14 @@ function update_q_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_smal
     end
 end
 
-function update_p_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 
+function update_p_loop!(XtX, Xtz, g::AbstractArray{T}, q, p, qp_small00_, qp_small01_, qp_small10_, qp_small11_, 
     irange, jrange, K) where T
     firsti, firstj = first(irange), first(jrange)
+    tid = threadid()
+    qp_small00 = qp_small00_[tid]
+    qp_small01 = qp_small01_[tid]
+    qp_small10 = qp_small10_[tid]
+    qp_small11 = qp_small11_[tid]
     qp_block!(qp_small00, qp_small01, qp_small10, qp_small11, q, p, irange, jrange, K)
     # if !(q_ === q && p_ === p)
     #     qp_block!(qp_small00_, qp_small01_, qp_small10_, qp_small11_, q_, p_, irange, jrange, K)

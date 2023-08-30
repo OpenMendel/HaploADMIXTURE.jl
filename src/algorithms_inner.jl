@@ -5,17 +5,24 @@
 #     r
 # end
 
+import OpenADMIXTURE: tiler_scalar, threader_scalar, threader!
+
 function loglikelihood_full(d::AdmixData2{T, T2}, g::AbstractArray{T2}, q, p) where {T, T2}
     I, J, K = d.I, d.J, d.K
-    r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
-    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+    # r = loglikelihood_full_loop(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+    tid = Threads.threadid()
+
+    r = threader_scalar(loglikelihood_full_loop, typeof(qp_small00), zero(T), (g, q, p, 
+        d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K)
     r
 end
 
 function loglikelihood_full2(d::AdmixData2{T, T2}, g::AbstractArray{T2}, q, p) where {T, T2}
     I, J, K = d.I, d.J, d.K
-    r = loglikelihood_full_loop2(g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
-    # r = tiler_scalar(loglikelihood_loop, typeof(qp_small), zero(T), (g, q, p, qp_small), 1:I, 1:J, K)
+    tid = Threads.threadid()
+    r = threader_scalar(loglikelihood_full_loop2, typeof(d.qp_small00[1]), zero(T), (g, q, p, 
+        d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K)
+    # r = loglikelihood_full_loop2(g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
     r 
 end
 
@@ -47,19 +54,13 @@ function em!(d::AdmixData2{T, T2}, g::AbstractArray{T2}; d_cu=nothing, g_cu=noth
         fill!(d.q_next, zero(T))
         fill!(d.p_next, zero(T))
         if !fix_q
-            em_loop!(d.q_next, d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
+            threader!(em_loop!, eltype(d.q_next), (d.q_next, d.p_next, g, d.q, d.p, 
+                d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K, true; maxL=64)
+            # em_loop!(d.q_next, d.p_next, g, d.q_T2, d.p_T2, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
         else
-            em_p_loop!(d.p_next, g, d.q, d.p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
-        end
-        if !fix_q
-            d.q_next .= d.q_T2
-        else 
-            d.q_next .= d.q
-        end
-        if !fix_p
-            d.p_next .= d.p_T2
-        else
-            d.p_next = d.p
+            threader!(em_p_loop!, eltype(d.p_next), (d.p_next, g, d.q, d.p, 
+                d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 1:I, 1:J, K, true; maxL=64)
+            # em_p_loop!(d.p_next, g, d.q_T2, d.p_T2, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11, 1:I, 1:J, K)
         end
     end
     d.q_next ./= 2(J .- d.doublemissing)
@@ -112,9 +113,10 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
     @time if d_cu === nothing # CPU operation
         fill!(XtX_T2, zero(T2))
         fill!(Xtz_T2, zero(T2))
-        update_q_loop!(XtX_T2, Xtz_T2, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
-        # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
-        #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
+        # update_q_loop!(XtX_T2, Xtz_T2, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+        threader!(update_q_loop!, 
+            eltype(XtX), (XtX_T2, Xtz_T2, g, q, p, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11), 
+            1:I, 1:J, K, true; maxL=16)
     else # GPU operation
         q_T2 .= q
         p_T2 .= p
@@ -175,7 +177,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
 end
 
 """
-    update_q!(d, g, update2=false; d_cu=nothing, g_cu=nothing)
+    update_p!(d, g, update2=false; d_cu=nothing, g_cu=nothing)
 Update Q using sequential quadratic programming.
 
 # Input
@@ -204,9 +206,9 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
     @time if d_cu === nothing # CPU operation
         fill!(XtX_T2, zero(T2))
         fill!(Xtz_T2, zero(T2))
-        update_p_loop!(XtX_T2, Xtz_T2, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
-        # threader!(d.skipmissing ? update_q_loop_skipmissing! : update_q_loop!, 
-        #     typeof(XtX), (XtX, Xtz, g, q, p, qp_small), 1:I, 1:J, K, true; maxL=16)
+        # update_p_loop!(XtX_T2, Xtz_T2, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11, 1:I, 1:J, K)
+        threader!(update_p_loop!, 
+            eltype(XtX), (XtX_T2, Xtz_T2, g, q, p, qp_small00, qp_small01, qp_small10, qp_small11), 1:I, 1:J, K, false; maxL=16)
     else # GPU operation
         q_T2 .= q
         p_T2 .= p

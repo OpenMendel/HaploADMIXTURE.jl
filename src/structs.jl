@@ -68,23 +68,23 @@ mutable struct AdmixData2{T,T2}
     XtX_pv      :: TwoDSlice{T}
     Xtz_pv      :: OneDSlice{T}
 
-    qp_small00    :: Array{T2, 3}   # 64 x 64
-    qp_smallv00   :: TwoDSlice{T2}
-    qp_small01    :: Array{T2, 3}   # 64 x 64
-    qp_smallv01   :: TwoDSlice{T2}
-    qp_small10    :: Array{T2, 3}   # 64 x 64
-    qp_smallv10   :: TwoDSlice{T2}
-    qp_small11    :: Array{T2, 3}   # 64 x 64
-    qp_smallv11   :: TwoDSlice{T2}
+    qp_small00    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv00   :: TwoDSlice{T2}
+    qp_small01    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv01   :: TwoDSlice{T2}
+    qp_small10    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv10   :: TwoDSlice{T2}
+    qp_small11    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv11   :: TwoDSlice{T2}
 
-    qp_small00_    :: Array{T2, 3}   # 64 x 64
-    qp_smallv00_   :: TwoDSlice{T2}
-    qp_small01_    :: Array{T2, 3}   # 64 x 64
-    qp_smallv01_   :: TwoDSlice{T2}
-    qp_small10_    :: Array{T2, 3}   # 64 x 64
-    qp_smallv10_   :: TwoDSlice{T2}
-    qp_small11_    :: Array{T2, 3}   # 64 x 64
-    qp_smallv11_   :: TwoDSlice{T2}
+    qp_small00_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv00_   :: TwoDSlice{T2}
+    qp_small01_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv01_   :: TwoDSlice{T2}
+    qp_small10_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv10_   :: TwoDSlice{T2}
+    qp_small11_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv11_   :: TwoDSlice{T2}
 
     U           ::Matrix{T}   # K(I + 4J) x Q
     V           ::Matrix{T}   # K(I + 4J) x Q
@@ -238,37 +238,53 @@ function AdmixData2{T,T2}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where {T, T2}
     # maxL = tile_maxiter(typeof(Xtz_p))
     # qp_small00 = convert(Array{T2}, rand(rng, I, J, NT))
     maxL = OpenADMIXTURE.tile_maxiter(typeof(Xtz_p))
-    qp_small00 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv00 = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_small00 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small00 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv00 = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_smallv00 = qp_small00
 
     # qp_small01 = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small01 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv01 = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_small01 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small01 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv01 = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_smallv01 = qp_small01
 
     # qp_small10 = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small10 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv10 = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_small10 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small10 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv10 = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_smallv10 = qp_small10
 
     # qp_small11 = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small11 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv11 = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_small11 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small11 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv11 = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_smallv11 = qp_small11
 
 
     # qp_small00_ = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small00_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv00_ = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_small00_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small00_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv00_ = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_smallv00_ = qp_small00_
 
     # qp_small01_ = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small01_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv01_ = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_small01_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small01_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv01_ = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_smallv01_ = qp_small01_
 
     # qp_small10_ = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small10_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv10_ = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_small10_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small10_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv10_ = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_smallv10_ = qp_small10_
 
     # qp_small11_ = convert(Array{T2}, rand(rng, I, J, NT))
-    qp_small11_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
-    qp_smallv11_ = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_small11_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small11_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv11_ = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_smallv11_ = qp_small11_
     # qf_thin  = rand(T, I, maxL)
     # f_tmp = similar(f)
     # q_tmp = similar(q);
@@ -333,14 +349,14 @@ function AdmixData2{T,T2}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where {T, T2}
         XtX_q_T2, Xtz_q_T2, XtX_p_T2, Xtz_p_T2, 
         qv, q_nextv, q_tmpv, pv, p_nextv, p_tmpv, 
         XtX_qv, Xtz_qv, XtX_pv, Xtz_pv,
-        qp_small00, qp_smallv00,
-        qp_small01, qp_smallv01,
-        qp_small10, qp_smallv10,
-        qp_small11, qp_smallv11, 
-        qp_small00_, qp_smallv00_,
-        qp_small01_, qp_smallv01_,
-        qp_small10_, qp_smallv10_,
-        qp_small11_, qp_smallv11_, 
+        qp_small00, # qp_smallv00,
+        qp_small01, # qp_smallv01,
+        qp_small10, # qp_smallv10,
+        qp_small11, # qp_smallv11, 
+        qp_small00_, # qp_smallv00_,
+        qp_small01_, # qp_smallv01_,
+        qp_small10_, # qp_smallv10_,
+        qp_small11_, # qp_smallv11_, 
         U, V, 
         v_kk, v_4k4k,
         tmp_k, tmp_k2, tmp_k2_, tmp_XtX_p,
