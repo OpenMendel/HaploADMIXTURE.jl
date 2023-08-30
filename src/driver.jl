@@ -1,5 +1,5 @@
 """
-    run_admixture(filename, K;
+    run_admixture(filename, I, J, K;
         rng=Random.GLOBAL_RNG, 
         sparsity=nothing,
         prefix=filename[1:end-4],
@@ -18,9 +18,12 @@ The main runner function for admixture.
 
 # Input: 
 - `filename``: the PLINK BED file name to analyze, including the extension.
+- `I`: number of individuals. First I will be used.
+- `J`: number of haplotype pairs. First 2J AIMs are used.
 - `K`: number of clusters.
 - `rng`: random number generator.
-- `sparsity`: number of AIMs to be utilized. `nothing` to not run the SKFR step.
+- `sparsity`: number of blocks to be selected by SKFR. `nothing` to not run the SKFR step. 
+    Note: 2 * sparsity is the AIMs being selected.
 - `prefix`: prefix used for the output PLINK file if SKFR is used.
 - `skfr_tries`: number of repeats of SKFR with different initializations.
 - `skfr_max_inner_iter`: maximum number of iterations for each call for SKFR.
@@ -32,7 +35,7 @@ The main runner function for admixture.
 - `use_gpu`: whether to use GPU for computation
 - `progress_bar`: whether to show a progress bar for main loop
 """
-function run_admixture(filename, K; 
+function run_admixture(filename, I, J, K; 
     rng=Random.GLOBAL_RNG, 
     sparsity=nothing, 
     prefix=filename[1:end-4],
@@ -47,7 +50,6 @@ function run_admixture(filename, K;
     Q=3, 
     use_gpu=false,
     verbose=false,
-    progress_bar=true,
     fix_q=false,
     fix_p=false,
     init_q=nothing,
@@ -68,9 +70,9 @@ function run_admixture(filename, K;
         admix_input = filename
         clusters, aims = nothing, nothing
     end
-    d = _admixture_base(admix_input, K; 
+    d = _admixture_base(admix_input, I, J, K; 
         n_iter=admix_n_iter, rtol=admix_rtol, rng=rng, em_iters=admix_n_em_iters, 
-        T=T, T2=T2, Q=Q, use_gpu=use_gpu, verbose=verbose, progress_bar=progress_bar,
+        T=T, T2=T2, Q=Q, use_gpu=use_gpu,
         fix_q=fix_q, fix_p=fix_p, init_q=init_q, init_p=init_p)
     d, clusters, aims
 end
@@ -85,7 +87,6 @@ function _filter_SKFR(filename, K, sparsity::Integer;
     max_inner_iter = 50, 
     ftn = SKFR.sparsekmeans1)
     @assert endswith(filename, ".bed") "filename should end with .bed"
-    @assert sparsity % 2 == 0 "Number of AIMs must be an even number."
     g = SnpArray(filename)
     ISM = SKFR.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
     if tries == 1
@@ -96,7 +97,7 @@ function _filter_SKFR(filename, K, sparsity::Integer;
     end
     I, J = size(g)
     aims_sorted = sort(aims)
-    des = "$(prefix)_$(K)_$(sparsity)aims"
+    des = "$(prefix)_$(K)_$(sparsity * 2)aims"
     println(des)
     SnpArrays.filter(filename[1:end-4], trues(I), aims_sorted; des=des)
     des * ".bed", clusters, aims
@@ -111,7 +112,6 @@ function _filter_SKFR(filename, K, sparsities::AbstractVector{<:Integer};
     tries = 10,
     max_inner_iter = 50)
     @assert endswith(filename, ".bed") "filename should end with .bed"
-    @assert sparsity % 2 == 0 "Number of AIMs must be an even number."
     g = SnpArray(filename)
     ISM = SKFR.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
     if typeof(sparsities) <: AbstractVector
@@ -129,7 +129,7 @@ function _filter_SKFR(filename, K, sparsities::AbstractVector{<:Integer};
     outputfiles, clusters, aims
 end
 
-function _admixture_base(filename, K; 
+function _admixture_base(filename, I, J, K; 
     n_iter=1000, 
     rtol=1e-7, 
     rng=Random.GLOBAL_RNG,
@@ -139,7 +139,6 @@ function _admixture_base(filename, K;
     Q=3, 
     use_gpu=false,
     verbose=false,
-    progress_bar=true,
     fix_q=false,
     fix_p=false,
     init_q=nothing,
@@ -147,10 +146,9 @@ function _admixture_base(filename, K;
     println("Loading genotype data...")
     g = SnpArray(filename)
     g_la = SnpLinAlg{T2}(g)
-    I = size(g_la, 1)
-    J = size(g_la, 2)
+
     println("Loaded $I samples and $J SNPs")
-    d = AdmixData2{T, T2}(I, J, K, Q, g; skipmissing=true, rng=rng)
+    d = AdmixData2{T, T2}(I, J, K, Q, g; rng=rng)
     if use_gpu
         d_cu, g_cu = _cu_admixture_base(d, g_la, I, J)
     else 
@@ -160,7 +158,7 @@ function _admixture_base(filename, K;
     if verbose
         if init_q === nothing || init_p === nothing
             @time init_em!(d, g_la, em_iters;
-                        d_cu = d_cu, g_cu=g_cu, verbose=verbose)
+                        d_cu = d_cu, g_cu=g_cu)
         end
         if init_q !== nothing
             d.q .= init_q
@@ -171,14 +169,12 @@ function _admixture_base(filename, K;
         @time if progress_bar
             messages = @capture_out admixture_qn!(d, g_la, n_iter, rtol;
                 d_cu = d_cu, g_cu = g_cu, mode=:ZAL,
-                verbose=verbose, progress_bar=true,
                 fix_q=fix_q, fix_p=fix_p)
             println(messages)
         else
             admixture_qn!(d, g_la, n_iter, rtol;
                 d_cu = d_cu, g_cu = g_cu, mode=:ZAL,
-                fix_q=fix_q, fix_p=fix_p,
-                verbose=verbose)
+                fix_q=fix_q, fix_p=fix_p)
         end
     else
         if init_q === nothing || init_p === nothing
@@ -190,16 +186,15 @@ function _admixture_base(filename, K;
         if init_p !== nothing
             d.p .= init_p
         end
-        if progress_bar
-            admixture_qn!(d, g_la, n_iter, rtol;
-                d_cu = d_cu, g_cu = g_cu, mode=:ZAL, progress_bar=true,
-                fix_q=fix_q, fix_p=fix_p)
-        else
-            admixture_qn!(d, g_la, n_iter, rtol;
-                d_cu = d_cu, g_cu = g_cu, mode=:ZAL,
-                fix_q=fix_q, fix_p=fix_p,
-                verbose=verbose)
-        end
+        # if progress_bar
+        #     admixture_qn!(d, g_la, n_iter, rtol;
+        #         d_cu = d_cu, g_cu = g_cu, mode=:ZAL, #progress_bar=true,
+        #         fix_q=fix_q, fix_p=fix_p)
+        # else
+        admixture_qn!(d, g_la, n_iter, rtol;
+            d_cu = d_cu, g_cu = g_cu, mode=:ZAL,
+            fix_q=fix_q, fix_p=fix_p)
+        # end
     end
     d
 end
