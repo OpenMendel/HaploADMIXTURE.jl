@@ -19,6 +19,7 @@ Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [compat]
 Formatting = "0.4"
+LoopVectorization = "0.12"
 julia = "1.7"
 
 [extras]
