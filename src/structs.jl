@@ -11,7 +11,7 @@ function tile_maxiter(::Type{<:AbstractArray{T}}) where {T}
 end
 tile_maxiter(::Type{AT}) where {AT} = TILE[] ÷ 8 # treat anything unkown like Float64
 
-mutable struct AdmixData2{T}
+mutable struct AdmixData2{T,T2}
     I           ::Int
     J           ::Int
     K           ::Int
@@ -37,16 +37,23 @@ mutable struct AdmixData2{T}
     q_next      ::Matrix{T}
     q_next2     ::Matrix{T}
     q_tmp       ::Matrix{T}
+    q_T2        ::Matrix{T2}
 
     p           ::Matrix{T} # K x 4J
     p_next      ::Matrix{T}
     p_next2     ::Matrix{T}
     p_tmp       ::Matrix{T}
+    p_T2        ::Matrix{T2}
 
     XtX_q       ::Array{T, 3} # K x K x I
     Xtz_q       ::Matrix{T}   # K x I
     XtX_p       ::Array{T, 3} # K x K x 4J
     Xtz_p       ::Matrix{T}   # K x 4J
+
+    XtX_q_T2       ::Array{T2, 3} # K x K x I
+    Xtz_q_T2       ::Matrix{T2}   # K x I
+    XtX_p_T2       ::Array{T2, 3} # K x K x 4J
+    Xtz_p_T2       ::Matrix{T2}   # K x 4J
 
     # views
     qv          :: OneDSlice{T}
@@ -61,23 +68,23 @@ mutable struct AdmixData2{T}
     XtX_pv      :: TwoDSlice{T}
     Xtz_pv      :: OneDSlice{T}
 
-    qp_small00    :: Array{T, 3}   # 64 x 64
-    qp_smallv00   :: TwoDSlice{T}
-    qp_small01    :: Array{T, 3}   # 64 x 64
-    qp_smallv01   :: TwoDSlice{T}
-    qp_small10    :: Array{T, 3}   # 64 x 64
-    qp_smallv10   :: TwoDSlice{T}
-    qp_small11    :: Array{T, 3}   # 64 x 64
-    qp_smallv11   :: TwoDSlice{T}
+    qp_small00    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv00   :: TwoDSlice{T2}
+    qp_small01    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv01   :: TwoDSlice{T2}
+    qp_small10    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv10   :: TwoDSlice{T2}
+    qp_small11    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv11   :: TwoDSlice{T2}
 
-    qp_small00_    :: Array{T, 3}   # 64 x 64
-    qp_smallv00_   :: TwoDSlice{T}
-    qp_small01_    :: Array{T, 3}   # 64 x 64
-    qp_smallv01_   :: TwoDSlice{T}
-    qp_small10_    :: Array{T, 3}   # 64 x 64
-    qp_smallv10_   :: TwoDSlice{T}
-    qp_small11_    :: Array{T, 3}   # 64 x 64
-    qp_smallv11_   :: TwoDSlice{T}
+    qp_small00_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv00_   :: TwoDSlice{T2}
+    qp_small01_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv01_   :: TwoDSlice{T2}
+    qp_small10_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv10_   :: TwoDSlice{T2}
+    qp_small11_    :: Vector{Array{T2, 2}}   # 64 x 64
+    # qp_smallv11_   :: TwoDSlice{T2}
 
     U           ::Matrix{T}   # K(I + 4J) x Q
     V           ::Matrix{T}   # K(I + 4J) x Q
@@ -142,7 +149,7 @@ Constructor for Admixture information.
 - skipmissing: skip computation of loglikelihood for missing values. Should be kept `true` in most cases
 - rng: Random number generation.
 """
-function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
+function AdmixData2{T,T2}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where {T, T2}
     NT = nthreads()
     x = convert(Array{T}, rand(rng, K, I + 4J))
     x_next = similar(x)
@@ -158,7 +165,7 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
     x_rr = similar(x_flat)
 
     doublemissing = zeros(Int, 1, I)
-
+    count_double_missing!(doublemissing, g)
     q       = view(x      , :, 1:I)#rand(T, K, J) 
     q       = unsafe_wrap(Array, pointer(q), size(q))
     q_next  = view(x_next , :, 1:I)
@@ -168,6 +175,7 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
     q_tmp   = view(x_tmp, :, 1:I)
     q_tmp  = unsafe_wrap(Array, pointer(q_tmp), size(q_tmp))
     q ./= sum(q, dims=1)
+    q_T2 = convert(Array{T2}, q)
 
     p       = view(x      , :, (I+1):(I+4J))#rand(T, K, J) 
     p       = unsafe_wrap(Array, pointer(p), size(p))
@@ -177,20 +185,30 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
     p_next2 = unsafe_wrap(Array, pointer(p_next2), size(p_next2))
     p_tmp   = view(x_tmp, :, (I+1):(I+4J))
     p_tmp   = unsafe_wrap(Array, pointer(p_tmp), size(p_tmp))
-    @inbounds for j in 1:J
+    for j in 1:J
         for k in 1:K
-            s = p[k, 4(j-1)+1] + p[k, 4(j-1)+2] + p[k, 4(j-1)+3] + p[k, 4(j-1)+4]
+            s = zero(T)
             for l in 1:4
-                p[k, 4(j-1)+l] /= s
+                s += p[k, 4(j-1)+l]
+            end
+            for l in 1:4
+                p[k, 4(j-1)+l] = p[k, 4(j-1)+l] / s
             end
         end
     end
+    p_T2 = convert(Array{T2}, p)
 
     XtX_q = convert(Array{T}, rand(rng, K, K, I))
     Xtz_q = convert(Array{T}, rand(rng, K, I))
 
     XtX_p = convert(Array{T}, rand(rng, K, K, 4J))
     Xtz_p = convert(Array{T}, rand(rng,  K, 4J))
+
+    XtX_q_T2 = convert(Array{T2}, XtX_q)
+    Xtz_q_T2 = convert(Array{T2}, Xtz_q)
+
+    XtX_p_T2 = convert(Array{T2}, XtX_p)
+    Xtz_p_T2 = convert(Array{T2}, Xtz_p)
 
     qv          = [view(q, :, i) for i in 1:I]
     q_nextv     = [view(q_next, :, i) for i in 1:I]
@@ -218,38 +236,55 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
 
     # qf = rand(T, I, J);
     # maxL = tile_maxiter(typeof(Xtz_p))
-    qp_small00 = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small00 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv00 = [view(qp_small00, :, :, t) for t in 1:NT]
+    # qp_small00 = convert(Array{T2}, rand(rng, I, J, NT))
+    maxL = OpenADMIXTURE.tile_maxiter(typeof(Xtz_p))
+    qp_small00 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small00 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv00 = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_smallv00 = qp_small00
 
-    qp_small01 = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small01 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv01 = [view(qp_small01, :, :, t) for t in 1:NT]
+    # qp_small01 = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small01 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small01 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv01 = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_smallv01 = qp_small01
 
-    qp_small10 = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small10 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv10 = [view(qp_small10, :, :, t) for t in 1:NT]
+    # qp_small10 = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small10 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small10 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv10 = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_smallv10 = qp_small10
 
-    qp_small11 = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small11 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv11 = [view(qp_small11, :, :, t) for t in 1:NT]
+    # qp_small11 = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small11 = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small11 = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv11 = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_smallv11 = qp_small11
 
 
-    qp_small00_ = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small00 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv00_ = [view(qp_small00, :, :, t) for t in 1:NT]
+    # qp_small00_ = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small00_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small00_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv00_ = [view(qp_small00, :, :, t) for t in 1:NT]
+    qp_smallv00_ = qp_small00_
 
-    qp_small01_ = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small01 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv01_ = [view(qp_small01, :, :, t) for t in 1:NT]
+    # qp_small01_ = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small01_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small01_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv01_ = [view(qp_small01, :, :, t) for t in 1:NT]
+    qp_smallv01_ = qp_small01_
 
-    qp_small10_ = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small10 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv10_ = [view(qp_small10, :, :, t) for t in 1:NT]
+    # qp_small10_ = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small10_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small10_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv10_ = [view(qp_small10, :, :, t) for t in 1:NT]
+    qp_smallv10_ = qp_small10_
 
-    qp_small11_ = convert(Array{T}, rand(rng, I, J, NT))
-    # qp_small11 = convert(Array{T}, rand(rng, maxL, maxL, NT))
-    qp_smallv11_ = [view(qp_small11, :, :, t) for t in 1:NT]
+    # qp_small11_ = convert(Array{T2}, rand(rng, I, J, NT))
+    qp_small11_ = [convert(Array{T2}, rand(rng, maxL, maxL)) for i in 1:NT]
+    # qp_small11_ = convert(Array{T2}, rand(rng, maxL, maxL, NT))
+    # qp_smallv11_ = [view(qp_small11, :, :, t) for t in 1:NT]
+    qp_smallv11_ = qp_small11_
     # qf_thin  = rand(T, I, maxL)
     # f_tmp = similar(f)
     # q_tmp = similar(q);
@@ -303,24 +338,25 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
     idx4 = Array{Int}(undef, 4, NT)
     idx4v = [view(idx4, :, t) for t in 1:NT]
 
-    AdmixData2{T}(I, J, K, Q, 
+    AdmixData2{T, T2}(I, J, K, Q, 
         x, x_next, x_next2, x_tmp, 
         x_flat, x_next_flat, x_next2_flat, x_tmp_flat,
         x_qq, x_rr,
         doublemissing,
-        q, q_next, q_next2, q_tmp, 
-        p, p_next, p_next2, p_tmp, 
-        XtX_q, Xtz_q, XtX_p, Xtz_p, 
+        q, q_next, q_next2, q_tmp, q_T2,
+        p, p_next, p_next2, p_tmp, p_T2,
+        XtX_q, Xtz_q, XtX_p, Xtz_p,
+        XtX_q_T2, Xtz_q_T2, XtX_p_T2, Xtz_p_T2, 
         qv, q_nextv, q_tmpv, pv, p_nextv, p_tmpv, 
         XtX_qv, Xtz_qv, XtX_pv, Xtz_pv,
-        qp_small00, qp_smallv00,
-        qp_small01, qp_smallv01,
-        qp_small10, qp_smallv10,
-        qp_small11, qp_smallv11, 
-        qp_small00_, qp_smallv00_,
-        qp_small01_, qp_smallv01_,
-        qp_small10_, qp_smallv10_,
-        qp_small11_, qp_smallv11_, 
+        qp_small00, # qp_smallv00,
+        qp_small01, # qp_smallv01,
+        qp_small10, # qp_smallv10,
+        qp_small11, # qp_smallv11, 
+        qp_small00_, # qp_smallv00_,
+        qp_small01_, # qp_smallv01_,
+        qp_small10_, # qp_smallv10_,
+        qp_small11_, # qp_smallv11_, 
         U, V, 
         v_kk, v_4k4k,
         tmp_k, tmp_k2, tmp_k2_, tmp_XtX_p,
@@ -336,4 +372,52 @@ function AdmixData2{T}(I, J, K, Q; rng=Random.GLOBAL_RNG) where T
         idx, idxv,
         idx4, idx4v,
         NaN, NaN)
+end
+
+struct QPThreadLocal{T}
+    tmp_k   :: Vector{T}
+    tmp_k1  :: Vector{T}
+    tmp_k1_ :: Vector{T}
+    tmp_k2  :: Vector{T}
+    tmp_k2_ :: Vector{T}
+    tmp_XtX_p :: Matrix{T}
+    tmp_4k_k :: Matrix{T}
+    tmp_4k_k_2 :: Matrix{T}
+    tmp_4k1 :: Vector{T}
+    tmp_4k1_ :: Vector{T}
+    tmp_5k1 :: Vector{T}
+    tmp_5k1_ :: Vector{T}
+    tableau_k1 :: Matrix{T}
+    tableau_k2 :: Matrix{T}
+    tableau_4k1 :: Matrix{T}
+    tableau_5k1 :: Matrix{T}
+    swept :: Vector{Bool}
+    swept_4k :: Vector{Bool}
+    idx :: Vector{Int}
+    idx4 :: Vector{Int}
+end
+function QPThreadLocal{T}(K::Int) where T
+    tmp_k = Vector{T}(undef, K)
+    tmp_k1 = Vector{T}(undef, K+1)
+    tmp_k1_ = Vector{T}(undef, K+1)
+    tmp_k2 = Vector{T}(undef, K+2)
+    tmp_k2_ = similar(tmp_k2)
+    tmp_XtX_p = Array{T, 2}(undef, 4K, 4K)
+    tmp_4k_k = Array{T, 2}(undef, 4K, K)
+    tmp_4k_k_2 = Array{T, 2}(undef, 4K, K)
+    tmp_4k1 = Vector{T}(undef, 4K+1)
+    tmp_4k1_ = similar(tmp_4k1) 
+    tmp_5k1 = Vector{T}(undef, 5K+1)
+    tmp_5k1_ = similar(tmp_5k1)
+    tableau_k1 = Array{T, 2}(undef, K+1, K+1)
+    tableau_k2 = Array{T, 2}(undef, K+2, K+2)
+    tableau_4k1 = Array{T, 2}(undef, 4K+1, 4K+1)
+    tableau_5k1 = Array{T, 2}(undef, 5K+1, 5K+1)
+    swept = convert(Vector{Bool}, trues(K))
+    swept_4k = convert(Vector{Bool}, trues(4K))
+    idx = Array{Int}(undef, K)
+    idx4 = Array{Int}(undef, 4)
+    QPThreadLocal{T}(tmp_k, tmp_k1, tmp_k1_, tmp_k2, tmp_k2_, tmp_XtX_p, 
+        tmp_4k_k, tmp_4k_k_2, tmp_4k1, tmp_4k1_, tmp_5k1, tmp_5k1_, 
+        tableau_k1, tableau_k2, tableau_4k1, tableau_5k1, swept, swept_4k, idx, idx4)
 end
