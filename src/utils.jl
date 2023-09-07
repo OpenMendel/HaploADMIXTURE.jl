@@ -21,7 +21,7 @@ function project_p!(p::AbstractMatrix{T}, idx::AbstractVector{Int}, K; pseudocou
     J = size(p, 2) ÷ 4
     @inbounds for j in 1:J
         for k in 1:K
-            OpenADMIXTURE.project_q!(@view(p[k, 4(j-1)+1:4j]), idx)
+            OpenADMIXTURE.project_q!(@view(p[k, 4(j-1)+1:4j]), idx; pseudocount=pseudocount)
         end
     end
     p
