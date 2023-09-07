@@ -18,8 +18,9 @@ SnpArrays = "4e780e97-f5bf-4111-9dc4-b70aaf691b06"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [compat]
-SnpArrays = "0.3"
+Formatting = "0.4"
 LoopVectorization = "0.12"
+SnpArrays = "0.3"
 julia = "1.7"
 
 [extras]
