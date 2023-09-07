@@ -147,7 +147,7 @@ function _admixture_base(filename, I, J, K;
     g = SnpArray(filename)
     g_la = SnpLinAlg{T2}(g)
 
-    println("Loaded $I samples and $J SNPs")
+    println("Loaded $I samples and $(2J) SNPs")
     d = AdmixData2{T, T2}(I, J, K, Q, g; rng=rng)
     if use_gpu
         d_cu, g_cu = _cu_admixture_base(d, g_la, I, J)
