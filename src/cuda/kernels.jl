@@ -72,6 +72,35 @@ end
     return nothing
 end
 
+@inline function em_p_kernel!(p_next, g::AbstractArray{UInt8, 2}, 
+    q::AbstractArray{T, 2}, p::AbstractArray{T, 2}, irange, jrange) where T
+    K = size(q, 1)
+    firsti, firstj = first(irange), first(jrange)
+    lasti, lastj = last(irange), last(jrange)
+    xindex = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    xstride = blockDim().x * gridDim().x
+    yindex = (blockIdx().y - 1) * blockDim().y + threadIdx().y
+    ystride = blockDim().y * gridDim().y   
+    oneT = one(T)
+    twoT = 2one(T)
+    T2 = T
+    @inbounds for j = (firstj + yindex - 1):ystride:lastj
+        for i = (firsti + xindex - 1):xstride:lasti
+            @qp_local_gpu
+            gmat = g
+            @gcoefs_snparray
+            @coefs
+            for k in 1:K
+                CUDA.@atomic p_next[k, 4(j-1)+1] += c00 * q[k, i] * p[k, 4(j-1)+1] / qp00
+                CUDA.@atomic p_next[k, 4(j-1)+2] += c01 * q[k, i] * p[k, 4(j-1)+2] / qp01
+                CUDA.@atomic p_next[k, 4(j-1)+3] += c10 * q[k, i] * p[k, 4(j-1)+3] / qp10
+                CUDA.@atomic p_next[k, 4j      ] += c11 * q[k, i] * p[k, 4j      ] / qp11
+            end
+        end
+    end
+    return nothing
+end
+
 @inline function update_q_kernel!(XtX, Xtz, g::AbstractArray{UInt8, 2}, 
     q::AbstractArray{T, 2}, p::AbstractArray{T, 2}, irange, jrange, joffset=0) where T
     K = size(q, 1)
