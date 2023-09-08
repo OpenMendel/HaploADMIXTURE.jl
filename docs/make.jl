@@ -17,6 +17,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/HaploADMIXTURE/HaploADMIXTURE.jl",
+    repo="github.com/OpenMendel/HaploADMIXTURE.jl",
     devbranch = "main"
 )
