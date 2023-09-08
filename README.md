@@ -1,4 +1,4 @@
-# HaploADMIXTURE.JL
+# HaploADMIXTURE.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://OpenMendel.github.io/HaploADMIXTURE.jl/dev)
 
