@@ -4,7 +4,7 @@ This software package is an open-source Julia implementation of HaploADMIXTURE, 
 
 It supports acceleartion through multithreading and graphic processing units (GPUs). By directly utilizing the data format of the PLINK BED file, the memory usage is highly efficient. 
 
-It estimates ancestry with maximum-likelihood method for a large SNP genotype datasets, where individuals are assumed to be unrelated. The input is binary PLINK 1 BED-formatted file (`.bed`). Also, you will need an idea of $K$, the number of ancestral populations. One possible way to figure out a good value of $K$ is through Akaike information criterion. If the number of SNPs is too large, you may choose to run on a subset of SNPs selected by their information content, using the blockwise [sparse $K$-means via feature ranking](https://github.com/kose-y/SKFR.jl) (SKFR) method. When SKFR is applied, it selects given number of blocks of two nearby SNPs.
+It estimates ancestry with maximum-likelihood method for a large SNP genotype datasets, where individuals are assumed to be unrelated. The input is binary PLINK 1 BED-formatted file (`.bed`). Also, you will need an idea of $K$, the number of ancestral populations. One possible way to figure out a good value of $K$ is through Akaike information criterion. If the number of SNPs is too large, you may choose to run on a subset of SNPs selected by their information content, using the blockwise [sparse $K$-means via feature ranking](https://github.com/kose-y/SparseKmeansFeatureRanking.jl) (SKFR) method. When SKFR is applied, it selects given number of blocks of two nearby SNPs.
 
 ## Installation
 
@@ -15,7 +15,7 @@ This package requires Julia v1.7 or later, which can be obtained from
 The package can be installed by running the following code:
 ```julia
 using Pkg
-pkg"add https://github.com/kose-y/SKFR.jl"
+pkg"add https://github.com/kose-y/SparseKmeansFeatureRanking.jl"
 pkg"add https://github.com/OpenMendel/OpenADMIXTURE.jl"
 pkg"add https://github.com/OpenMendel/HaploADMIXTURE.jl"
 ```

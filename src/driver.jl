@@ -58,9 +58,9 @@ function run_admixture(filename, I, J, K;
     println("Using $filename as input.")
     if sparsity !== nothing
         ftn = if skfr_mode == :global
-            SKFR.sparsekmeans1
+            SparseKmeansFeatureRanking.sparsekmeans1
         elseif skfr_mode == :local
-            SKFR.sparsekmeans2
+            SparseKmeansFeatureRanking.sparsekmeans2
         else
             @assert false "skfr_mode can only be :global or :local"
         end
@@ -85,14 +85,14 @@ function _filter_SKFR(filename, K, sparsity::Integer;
     prefix=filename[1:end-4],
     tries = 10,
     max_inner_iter = 50, 
-    ftn = SKFR.sparsekmeans1)
+    ftn = SparseKmeansFeatureRanking.sparsekmeans1)
     @assert endswith(filename, ".bed") "filename should end with .bed"
     g = SnpArray(filename)
-    ISM = SKFR.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
+    ISM = SparseKmeansFeatureRanking.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
     if tries == 1
         (clusters, _, aims, _, _) = ftn(ISM, sparsity; max_iter = max_inner_iter, squares=false)
     else
-        (clusters, _, aims, _, _, _) = SKFR.sparsekmeans_repeat(ISM, sparsity; iter = tries, 
+        (clusters, _, aims, _, _, _) = SparseKmeansFeatureRanking.sparsekmeans_repeat(ISM, sparsity; iter = tries, 
             max_inner_iter=max_inner_iter, ftn=ftn)
     end
     I, J = size(g)
@@ -113,10 +113,10 @@ function _filter_SKFR(filename, K, sparsities::AbstractVector{<:Integer};
     max_inner_iter = 50)
     @assert endswith(filename, ".bed") "filename should end with .bed"
     g = SnpArray(filename)
-    ISM = SKFR.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
+    ISM = SparseKmeansFeatureRanking.ImputedSnpMatrix{Float64}(g, K; rng=rng, blocksize=2)
     if typeof(sparsities) <: AbstractVector
         @assert issorted(sparsities; rev=true) "sparsities should be decreasing"
-        (clusters, aims) = SKFR.sparsekmeans_path(ISM, sparsities; iter=tries, max_inner_iter=max_inner_iter)
+        (clusters, aims) = SparseKmeansFeatureRanking.sparsekmeans_path(ISM, sparsities; iter=tries, max_inner_iter=max_inner_iter)
     end
     I, J = size(g)
     outputfiles = String[]
