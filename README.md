@@ -34,7 +34,7 @@ pkg"add CUDA"
 ## Citation
 The methods and applications of this software package are detailed in the following publication:
 
-_To be updated._
+_Ko, S, Sobel EM, Zhou H, Lange K. Estimation of Genetic Admixture Proportions via Haplotypes. bioRxiv 2023. doi: [10.1101/2023.09.22.559067](https://doi.org/10.1101/2023.09.22.559067)._
 
 If you use OpenMendel analysis packages in your research, please cite the following reference in the resulting publications:
 
