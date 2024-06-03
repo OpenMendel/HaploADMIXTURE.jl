@@ -149,7 +149,7 @@ function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=100
             else # CPU mode
                 loglikelihood_full2(d, g, d.q_tmp, d.p_tmp)
             end
-            if d.ll_prev < ll_qn
+            if ll_basic < ll_qn
                 d.x .= d.x_tmp
                 d.ll_new = ll_qn
             else
