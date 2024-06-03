@@ -16,6 +16,8 @@ function init_em!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Integer;
         OpenADMIXTURE.project_q!(d.q, d.idxv[1])
         # ll_test = loglikelihood_full2(d, g, d.q, d.p)
         @info "EM iter $i, ll: $(d.ll_new)"
+        flush(stdout)
+        flush(stderr)
     end
 end
 
