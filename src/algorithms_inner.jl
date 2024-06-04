@@ -215,7 +215,8 @@ Update Q using sequential quadratic programming.
 - `g_cu`: a `CuMatrix{UInt8}` corresponding to the data part of 
 """
 function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
-    d_cu=nothing, g_cu=nothing, penalty=false, rho=1e7) where {T,T2}
+    d_cu=nothing, g_cu=nothing, penalty=false, rho=1e7,
+        guarantee_increase=false) where {T,T2}
     I, J, K = d.I, d.J, d.K
     pdiff, XtX, Xtz, XtX_T2, Xtz_T2, qp_small00, qp_small01, qp_small10, qp_small11 = d.p_tmp, d.XtX_p, d.Xtz_p, d.XtX_p_T2, d.Xtz_p_T2, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11
     q_T2, p_T2 = d.q_T2, d.p_T2
