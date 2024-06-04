@@ -95,7 +95,8 @@ Update Q using sequential quadratic programming.
 - `g_cu`: a `CuMatrix{UInt8}` corresponding to the data part of 
 """
 function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
-    d_cu=nothing, g_cu=nothing, penalty=false, rho=1e7) where {T, T2}
+    d_cu=nothing, g_cu=nothing, penalty=false, rho=1e7, 
+    guarantee_increase=false) where {T, T2}
     I, J, K = d.I, d.J, d.K
     qdiff, XtX, Xtz, XtX_T2, Xtz_T2, qp_small00, qp_small01, qp_small10, qp_small11 = d.q_tmp, d.XtX_q, d.Xtz_q, d.XtX_q_T2, d.Xtz_q_T2, d.qp_small00, d.qp_small01, d.qp_small10, d.qp_small11
     q_T2, p_T2 = d.q_T2, d.p_T2
@@ -165,12 +166,37 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                     tmp_k2, tmp_k2_, swept)
             end
         end
-        @inbounds for i in 1:I
-            for k in 1:K
-                q_next[k, i] = q[k, i] + qdiff[k, i]
+        factor = one(T)
+        if guarantee_increase
+            while True
+                @inbounds for i in 1:I
+                    for k in 1:K
+                        q_next[k, i] = q[k, i] + factor * qdiff[k, i]
+                    end
+                end
+                OpenADMIXTURE.project_q!(q_next, d.idxv[1])
+                ll_new = if d_cu !== nothing
+                    q_T2 .= q_next
+                    p_T2 .= p
+                    OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_T2, d.q_T2])
+                    loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
+                else
+                    loglikelihood_full2(d, g, d.q_next2, d.p_next2)
+                end
+                if ll_new > d.ll_tmp 
+                    d.ll_tmp = ll_new
+                    break
+                end
+                @info "Step size halved in updated_q. Current step size: $factor"
+                factor /= 2
+            end
+        else
+            @inbounds for i in 1:I
+                for k in 1:K
+                    q_next[k, i] = q[k, i] + qdiff[k, i]
+                end
             end
         end
-        OpenADMIXTURE.project_q!(q_next, d.idxv[1])
     end
     # ll_new = loglikelihood_full(d, g, q_next, p)#; q_=q, p_=p)
     # @info "q_update: ll_new=$ll_new, ll_prev=$ll_prev $(ll_new > ll_prev)"
@@ -275,13 +301,38 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                     tmp_5k1, tmp_5k1_, swept)#; verbose=verbose)
             end
         end
-        
-        @inbounds for j in 1:4J
-            for k in 1:K
-                p_next[k, j] = p[k, j] + pdiff[k, j]
+        factor = one(T)
+        if guarantee_increase
+            while True
+                @inbounds for j in 1:4J
+                    for k in 1:K
+                        p_next[k, j] = p[k, j] + factor * pdiff[k, j]
+                    end
+                end
+                project_p!(p_next, d.idx4v[1], K)
+                ll_new = if d_cu !== nothing
+                    q_T2 .= q
+                    p_T2 .= p_next
+                    OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_T2, d.q_T2])
+                    loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
+                else
+                    loglikelihood_full2(d, g, d.q_next2, d.p_next2)
+                end
+                if ll_new > d.ll_tmp 
+                    d.ll_tmp = ll_new
+                    break
+                end
+                @info "Step size halved in updated_p. Current step size: $factor"
+                factor /= 2
             end
+        else
+            @inbounds for j in 1:4J
+                for k in 1:K
+                    p_next[k, j] = p[k, j] + pdiff[k, j]
+                end
+            end
+            project_p!(p_next, d.idx4v[1], K)
         end
-        project_p!(p_next, d.idx4v[1], K)
     end
     # ll_new = loglikelihood_full(d, g, q, p_next)#; q_=q, p_=p)
     # @info "p_update: ll_new=$ll_new, ll_prev=$ll_prev $(ll_new > ll_prev)"
