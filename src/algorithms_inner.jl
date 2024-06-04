@@ -181,7 +181,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                     OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_T2, d.q_T2])
                     loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
                 else
-                    loglikelihood_full2(d, g, d.q_next2, d.p_next2)
+                    loglikelihood_full2(d, g, q_next, p)
                 end
                 if ll_new > d.ll_tmp 
                     d.ll_tmp = ll_new
@@ -318,7 +318,7 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                     OpenADMIXTURE.copyto_sync!([d_cu.p, d_cu.q], [d.p_T2, d.q_T2])
                     loglikelihood(d_cu, g_cu, d_cu.q, d_cu.p)
                 else
-                    loglikelihood_full2(d, g, d.q_next2, d.p_next2)
+                    loglikelihood_full2(d, g, q, p_next)
                 end
                 if ll_new > d.ll_tmp 
                     d.ll_tmp = ll_new
