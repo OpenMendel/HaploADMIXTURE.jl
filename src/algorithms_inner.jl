@@ -196,6 +196,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                     q_next[k, i] = q[k, i] + qdiff[k, i]
                 end
             end
+            OpenADMIXTURE.project_q!(q_next, d.idxv[1])
         end
     end
     # ll_new = loglikelihood_full(d, g, q_next, p)#; q_=q, p_=p)
