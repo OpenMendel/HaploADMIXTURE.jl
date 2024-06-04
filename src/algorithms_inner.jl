@@ -187,7 +187,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                     d.ll_tmp = ll_new
                     break
                 end
-                @info "Step size halved in updated_q. Current step size: $factor"
+                @info "Step size halved in updated_q. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
             end
         else
@@ -323,7 +323,7 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                     d.ll_tmp = ll_new
                     break
                 end
-                @info "Step size halved in updated_p. Current step size: $factor"
+                @info "Step size halved in updated_p. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
             end
         else
