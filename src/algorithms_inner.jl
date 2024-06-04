@@ -168,6 +168,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
         end
         factor = one(T)
         if guarantee_increase
+            @info "q_update: starting with comparison: $(d.ll_tmp)"
             while true
                 @inbounds for i in 1:I
                     for k in 1:K
@@ -305,6 +306,7 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
         end
         factor = one(T)
         if guarantee_increase
+            @info "p_update: starting with comparison: $(d.ll_tmp)"
             while true
                 @inbounds for j in 1:4J
                     for k in 1:K
