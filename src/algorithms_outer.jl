@@ -67,6 +67,7 @@ function admixture_qn!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, iter::Int=100
             # qf!(d.qf, d.q, d.f)
             # ll_prev = loglikelihood(g, d.qf)
             d.ll_prev = d.ll_new
+            d.ll_tmp  = d.ll_new
             if !fix_q
                 update_q!(d, g; d_cu=d_cu, g_cu=g_cu, penalty=q_penalty, guarantee_increase=guarantee_increase)
             else
