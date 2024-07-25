@@ -184,12 +184,17 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                 else
                     loglikelihood_full2(d, g, q_next, p)
                 end
-                if ll_new > d.ll_tmp 
+                if ll_new >= d.ll_tmp 
                     d.ll_tmp = ll_new
                     break
                 end
                 @info "Step size halved in updated_q. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
+                if factor < 1e-12 
+                    factor = 0.0
+                elseif factor == 0.0
+                    break
+                end
             end
         else
             @inbounds for i in 1:I
@@ -328,6 +333,11 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                 end
                 @info "Step size halved in updated_p. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
+                if factor < 1e-12 
+                    factor = 0.0
+                elseif factor == 0.0
+                    break
+                end
             end
         else
             @inbounds for j in 1:4J
