@@ -190,7 +190,7 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                 end
                 @info "Step size halved in updated_q. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
-                if factor < 1e-12 
+                if factor < 1e-3
                     factor = 0.0
                 elseif factor == 0.0
                     break
@@ -333,7 +333,7 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                 end
                 @info "Step size halved in updated_p. comparison: $(d.ll_tmp), current: $(ll_new), current step size: $factor"
                 factor /= 2
-                if factor < 1e-12 
+                if factor < 1e-3
                     factor = 0.0
                 elseif factor == 0.0
                     break
