@@ -192,7 +192,8 @@ function update_q!(d::AdmixData2{T, T2}, g::AbstractArray{T2}, update2=false;
                 factor /= 2
                 if factor < 1e-3
                     factor = 0.0
-                elseif factor == 0.0
+                end
+                if factor == 0.0
                     break
                 end
             end
@@ -335,7 +336,8 @@ function update_p!(d::AdmixData2{T,T2}, g::AbstractArray{T2}, update2=false;
                 factor /= 2
                 if factor < 1e-3
                     factor = 0.0
-                elseif factor == 0.0
+                end
+                if factor == 0.0
                     break
                 end
             end
