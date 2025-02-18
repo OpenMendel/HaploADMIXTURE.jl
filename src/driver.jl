@@ -50,6 +50,7 @@ function run_admixture(filename, I, J, K;
     Q=3, 
     use_gpu=false,
     verbose=false,
+    progress_bar=false,
     fix_q=false,
     fix_p=false,
     init_q=nothing,

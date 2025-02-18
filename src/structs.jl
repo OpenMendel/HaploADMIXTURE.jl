@@ -135,6 +135,7 @@ mutable struct AdmixData2{T,T2}
     # loglikelihoods
     ll_prev     ::Float64
     ll_new      ::Float64
+    ll_tmp      ::Float64
 end
 
 """
@@ -371,7 +372,7 @@ function AdmixData2{T,T2}(I, J, K, Q, g; rng=Random.GLOBAL_RNG) where {T, T2}
         sweptv, swept_4kv,
         idx, idxv,
         idx4, idx4v,
-        NaN, NaN)
+        NaN, NaN, NaN)
 end
 
 struct QPThreadLocal{T}

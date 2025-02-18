@@ -34,11 +34,11 @@ end
 function _cu_admixture_base(d::AdmixData2{T, T2}, g_la::SnpLinAlg{T2}, I::Int, J::Int) where {T, T2}
     d_cu = CuAdmixData(d, g_la)
     Ibytes = (I + 3) ÷ 4
-    g_cu = CuArray{UInt8, 2}(undef, Ibytes, 2J)
-    if 2J == size(g_la, 2)
-        copyto!(g_cu, @view(g_la.s.data[1:Ibytes, :]))
-    else
-        copyto!(g_cu, @view(g_la.s.data[1:Ibytes, 1:2J]))
-    end
+    g_cu = adapt(CuArray, g_la.s.data)
+    # if 2J == size(g_la, 2)
+    #     unsafe_copyto!(pointer(g_cu), pointer(g_la.s.data), Ibytes * 2J)
+    # else
+    #     copyto!(g_cu, @view(g_la.s.data[:, 1:2J]))
+    # end
     d_cu, g_cu
 end
